@@ -5,63 +5,63 @@
 <title>MAD Frequency MIDI Tool</title>
 <script src="https://unpkg.com/@tonejs/midi/build/Midi.js"></script>
 <style>
-  body { font-family: sans-serif; background:#111; color:#eee; padding:20px }
+  body { font-family:sans-serif; background:#111; color:#eee; padding:20px }
   button { padding:8px 14px; margin-top:10px }
 </style>
 </head>
 <body>
 
-<h2>MAD 周波数帯 MIDI ツール（フル版）</h2>
+<h2>MAD 周波数帯 MIDI ツール</h2>
 
 <div>
-  音源: <input type="file" id="audio" accept="audio/*">
+  音源: <input type="file" id="audioInput" accept="audio/*">
 </div>
 <div>
-  MIDI: <input type="file" id="midi" accept=".mid">
+  MIDI: <input type="file" id="midiInput" accept=".mid">
 </div>
 
-<button id="render">WAV 書き出し</button>
+<button id="renderBtn">WAV 書き出し</button>
+<br>
 <a id="download"></a>
 
 <script>
-let audioBuffer, midi;
+let audioBuffer = null;
+let midiData = null;
 
-/* ========= 基本関数 ========= */
+const audioInput = document.getElementById("audioInput");
+const midiInput  = document.getElementById("midiInput");
+const renderBtn  = document.getElementById("renderBtn");
+const download   = document.getElementById("download");
 
-// MIDI → 周波数（A4=440Hz）
+/* ===== 周波数計算 ===== */
 function midiToFreq(n) {
   return 440 * Math.pow(2, (n - 69) / 12);
 }
 
-// 音階 → 周波数帯（MAD用）
 function noteToBand(midi, width = 0.25) {
   const f = midiToFreq(midi);
   return [f * (1 - width), f * (1 + width)];
 }
 
-// AudioBuffer → WAV
+/* ===== WAV変換 ===== */
 function bufferToWav(buffer) {
   const ch = buffer.numberOfChannels;
   const len = buffer.length * ch * 2 + 44;
   const view = new DataView(new ArrayBuffer(len));
   let pos = 0;
 
-  function writeU16(v){ view.setUint16(pos,v,true); pos+=2 }
-  function writeU32(v){ view.setUint32(pos,v,true); pos+=4 }
+  const u16 = v => { view.setUint16(pos,v,true); pos+=2 };
+  const u32 = v => { view.setUint32(pos,v,true); pos+=4 };
 
-  view.setUint32(pos,0x46464952,false); pos+=4;
-  writeU32(len-8);
-  view.setUint32(pos,0x45564157,false); pos+=4;
-  view.setUint32(pos,0x20746d66,false); pos+=4;
-  writeU32(16); writeU16(1); writeU16(ch);
-  writeU32(buffer.sampleRate);
-  writeU32(buffer.sampleRate * ch * 2);
-  writeU16(ch * 2); writeU16(16);
-  view.setUint32(pos,0x61746164,false); pos+=4;
-  writeU32(len-pos-4);
+  u32(0x46464952); u32(len-8); u32(0x45564157);
+  u32(0x20746d66); u32(16); u16(1); u16(ch);
+  u32(buffer.sampleRate);
+  u32(buffer.sampleRate * ch * 2);
+  u16(ch * 2); u16(16);
+  u32(0x61746164); u32(len - pos - 4);
 
-  for(let i=0;i<buffer.length;i++){
-    for(let c=0;c<ch;c++){
+  for (let i=0;i<buffer.length;i++){
+    for (let c=0;c<ch;c++){
       let s = buffer.getChannelData(c)[i];
       s = Math.max(-1,Math.min(1,s));
       view.setInt16(pos, s<0?s*0x8000:s*0x7fff, true);
@@ -71,31 +71,29 @@ function bufferToWav(buffer) {
   return new Blob([view], {type:"audio/wav"});
 }
 
-/* ========= 読み込み ========= */
-
-audio.onchange = async e => {
+/* ===== 読み込み ===== */
+audioInput.onchange = async e => {
   const buf = await e.target.files[0].arrayBuffer();
   const ctx = new AudioContext();
   audioBuffer = await ctx.decodeAudioData(buf);
-  alert("音源OK");
+  alert("音源 読み込みOK");
 };
 
 midiInput.onchange = async e => {
   const buf = await e.target.files[0].arrayBuffer();
-  midi = new Midi(buf);
-  alert("MIDI OK");
+  midiData = new Midi(buf);
+  alert("MIDI 読み込みOK");
 };
 
-/* ========= 書き出し ========= */
-
-render.onclick = async () => {
-  if (!audioBuffer || !midi) {
-    alert("音源とMIDIを入れて");
+/* ===== 書き出し ===== */
+renderBtn.onclick = async () => {
+  if (!audioBuffer || !midiData) {
+    alert("音源とMIDIを両方入れて");
     return;
   }
 
-  const duration = midi.duration + 1;
   const rate = audioBuffer.sampleRate;
+  const duration = midiData.duration + 1;
 
   const offline = new OfflineAudioContext(
     audioBuffer.numberOfChannels,
@@ -103,7 +101,7 @@ render.onclick = async () => {
     rate
   );
 
-  midi.tracks.forEach(track => {
+  midiData.tracks.forEach(track => {
     track.notes.forEach(note => {
       const src = offline.createBufferSource();
       src.buffer = audioBuffer;
@@ -126,7 +124,7 @@ render.onclick = async () => {
       lp.connect(gain);
       gain.connect(offline.destination);
 
-      src.start(note.time, 0, 0.06); // ← MAD刻み
+      src.start(note.time, 0, 0.06);
     });
   });
 
