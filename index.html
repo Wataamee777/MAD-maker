@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>MAD MIDI Tool</title>
+
+  <!-- Tone.js -->
+  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+  <!-- MIDI parser -->
+  <script src="https://unpkg.com/@tonejs/midi/build/Midi.js"></script>
+</head>
+<body>
+  <h2>MAD MIDI Tool（最小構成）</h2>
+
+  <div>
+    音源:
+    <input type="file" id="audio" accept="audio/*">
+  </div>
+
+  <div>
+    MIDI:
+    <input type="file" id="midi" accept=".mid">
+  </div>
+
+  <button id="play">再生</button>
+
+  <script>
+    let audioBuffer;
+    let midiData;
+
+    // 音源読み込み
+    document.getElementById("audio").addEventListener("change", async e => {
+      const file = e.target.files[0];
+      const array = await file.arrayBuffer();
+      audioBuffer = await Tone.getContext().rawContext.decodeAudioData(array);
+      alert("音源読み込みOK");
+    });
+
+    // MIDI読み込み
+    document.getElementById("midi").addEventListener("change", async e => {
+      const file = e.target.files[0];
+      const array = await file.arrayBuffer();
+      midiData = new Midi(array);
+      alert("MIDI読み込みOK");
+    });
+
+    document.getElementById("play").onclick = async () => {
+      if (!audioBuffer || !midiData) {
+        alert("音源とMIDI入れて");
+        return;
+      }
+
+      await Tone.start();
+      const now = Tone.now();
+
+      midiData.tracks.forEach(track => {
+        track.notes.forEach(note => {
+          const src = new Tone.BufferSource(audioBuffer).toDestination();
+
+          // ピッチをノートに合わせる（MAD感）
+          src.playbackRate.value = Math.pow(2, (note.midi - 60) / 12);
+
+          // ノートONで短く鳴らす
+          src.start(
+            now + note.time,
+            0,
+            0.08   // ←ここがMAD感の正体（短く切る）
+          );
+        });
+      });
+    };
+  </script>
+</body>
+</html>
