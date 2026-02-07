@@ -87,20 +87,17 @@ midiInput.onchange = async e => {
 
 /* ===== 書き出し ===== */
 renderBtn.onclick = async () => {
+  console.log("render clicked");
+
+  // 🔑 GitHub Pages 対策（超重要）
+  const unlock = new AudioContext();
+  await unlock.resume();
+
   if (!audioBuffer || !midiData) {
     alert("音源とMIDIを両方入れて");
     return;
   }
-
-  const rate = audioBuffer.sampleRate;
-  const duration = midiData.duration + 1;
-
-  const offline = new OfflineAudioContext(
-    audioBuffer.numberOfChannels,
-    rate * duration,
-    rate
-  );
-
+  
   midiData.tracks.forEach(track => {
     track.notes.forEach(note => {
       const src = offline.createBufferSource();
